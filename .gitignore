@@ -18,3 +18,6 @@ __pycache__/
 
 # RAG vector store (generated at runtime)
 rag_data/
+
+# Pre-downloaded wheels (local artifact — rebuild with: pip download -r requirements.txt -d wheels/)
+wheels/
