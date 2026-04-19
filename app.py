@@ -13,11 +13,19 @@ import time
 import threading
 import logging
 import logging.handlers
+import functools
 import requests
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict
-from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context, redirect, url_for, flash
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+
+try:
+    from rag import pipeline as rag_pipeline
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
 
 load_dotenv()
 
@@ -102,6 +110,22 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
 
 # ---------------------------------------------------------------------------
+# User store (in-memory — swap for a database in production)
+# ---------------------------------------------------------------------------
+# Structure: { "email": { "password_hash": "...", "created_at": "..." } }
+users: dict[str, dict] = {}
+
+
+def login_required(f):
+    """Decorator that redirects unauthenticated users to the login page."""
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("user_email"):
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ---------------------------------------------------------------------------
 # SAGE Configuration
 # ---------------------------------------------------------------------------
 SAGE_BASE_URL = os.environ.get("SAGE_BASE_URL", "http://localhost:5001/v1")
@@ -176,6 +200,28 @@ OB4_EMAIL = os.environ.get("OB4_EMAIL", "")
 # local CA bundle.  For internal Azure endpoints we skip verification.
 # Set OB4_VERIFY_SSL=1 to re-enable once the CA bundle is fixed.
 OB4_VERIFY_SSL = os.environ.get("OB4_VERIFY_SSL", "0") == "1"
+
+
+# ---------------------------------------------------------------------------
+# RAG ingest state
+# ---------------------------------------------------------------------------
+_ingest_state: dict = {"status": "idle", "pages": 0, "chunks": 0, "error": ""}
+_ingest_lock = threading.Lock()
+
+
+def _run_ingest(max_pages: int) -> None:
+    global _ingest_state
+    with _ingest_lock:
+        _ingest_state = {"status": "running", "pages": 0, "chunks": 0, "error": ""}
+    try:
+        result = rag_pipeline.ingest(max_pages=max_pages)
+        with _ingest_lock:
+            _ingest_state = {"status": "done", **result, "error": ""}
+        logger.info("[RAG] Ingest complete: %s", result)
+    except Exception as exc:
+        logger.exception("[RAG] Ingest failed")
+        with _ingest_lock:
+            _ingest_state = {"status": "error", "pages": 0, "chunks": 0, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +376,84 @@ def stream_sage(messages: list[dict], session_id: str = ""):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Auth Routes
+# ---------------------------------------------------------------------------
+@app.route("/auth/login", methods=["GET"])
+def login_page():
+    """Show the login / register page."""
+    if session.get("user_email"):
+        return redirect(url_for("index"))
+    return render_template("login.html")
+
+
+@app.route("/auth/login", methods=["POST"])
+def login_submit():
+    """Validate credentials and log the user in."""
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+
+    if not email or not password:
+        flash("Email and password are required.", "error")
+        return redirect(url_for("login_page"))
+
+    user = users.get(email)
+    if not user or not check_password_hash(user["password_hash"], password):
+        flash("Invalid email or password.", "error")
+        return redirect(url_for("login_page"))
+
+    session["user_email"] = email
+    logger.info("[Auth] Login OK | user=%s", email)
+    return redirect(url_for("index"))
+
+
+@app.route("/auth/register", methods=["POST"])
+def register_submit():
+    """Create a new user account."""
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm_password", "")
+
+    if not email or not password:
+        flash("Email and password are required.", "error")
+        return redirect(url_for("login_page") + "?tab=register")
+
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+        return redirect(url_for("login_page") + "?tab=register")
+
+    if password != confirm:
+        flash("Passwords do not match.", "error")
+        return redirect(url_for("login_page") + "?tab=register")
+
+    if email in users:
+        flash("An account with this email already exists.", "error")
+        return redirect(url_for("login_page") + "?tab=register")
+
+    users[email] = {
+        "password_hash": generate_password_hash(password),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    logger.info("[Auth] Registered new user | email=%s", email)
+    flash("Account created! Please sign in.", "success")
+    return redirect(url_for("login_page"))
+
+
+@app.route("/auth/logout")
+def logout():
+    """Clear the session and redirect to login."""
+    email = session.pop("user_email", None)
+    session.clear()
+    logger.info("[Auth] Logout | user=%s", email)
+    flash("You have been signed out.", "info")
+    return redirect(url_for("login_page"))
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 @app.route("/")
+@login_required
 def index():
     """Render the main chat interface."""
     conv_id = session.get("conversation_id")
@@ -341,6 +464,7 @@ def index():
         "index.html",
         conversation_id=conv_id,
         conversations=conversations,
+        user_email=session.get("user_email", ""),
     )
 
 
@@ -390,6 +514,7 @@ def chat_stream():
     data = request.get_json(force=True)
     user_message = data.get("message", "").strip()
     conv_id = data.get("conversation_id") or session.get("conversation_id")
+    bot_type = data.get("bot_type", "")
 
     if not user_message:
         logger.warning("[/api/chat/stream] Empty message received")
@@ -397,7 +522,7 @@ def chat_stream():
 
     conv_id, history = get_or_create_conversation(conv_id)
     session["conversation_id"] = conv_id
-    logger.info("[/api/chat/stream] Stream request | conv=%s | len=%d", conv_id, len(user_message))
+    logger.info("[/api/chat/stream] Stream request | conv=%s | bot=%s | len=%d", conv_id, bot_type, len(user_message))
 
     # Append user message
     history.append({
@@ -406,7 +531,14 @@ def chat_stream():
         "timestamp": datetime.utcnow().isoformat(),
     })
 
-    sage_messages = _build_sage_messages(history)
+    base_messages = _build_sage_messages(history)
+
+    # RAG augmentation for the OneAI bot
+    if bot_type == "oneai-default" and RAG_AVAILABLE:
+        sage_messages = rag_pipeline.augment_messages(base_messages, user_message)
+        logger.info("[RAG] Augmented messages with KB context | conv=%s", conv_id)
+    else:
+        sage_messages = base_messages
 
     def generate():
         full_response = []
@@ -567,6 +699,41 @@ def ob4_chat():
     except Exception as e:
         logger.exception("[OB-4] Unexpected error | conv=%s", conv_id)
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# RAG Routes
+# ---------------------------------------------------------------------------
+@app.route("/api/rag/status", methods=["GET"])
+def rag_status():
+    """Return current ingest state and KB chunk count."""
+    if not RAG_AVAILABLE:
+        return jsonify({"available": False, "status": "unavailable", "chunks": 0})
+    with _ingest_lock:
+        state = dict(_ingest_state)
+    state["available"] = True
+    state["chunks"] = rag_pipeline.kb_count()
+    return jsonify(state)
+
+
+@app.route("/api/rag/ingest", methods=["POST"])
+def rag_ingest():
+    """Start a background crawl-and-index job for agilent.com."""
+    if not RAG_AVAILABLE:
+        return jsonify({"error": "RAG dependencies not installed."}), 503
+
+    with _ingest_lock:
+        if _ingest_state.get("status") == "running":
+            return jsonify({"error": "Ingest already running."}), 409
+
+    max_pages = int(request.get_json(force=True, silent=True) and
+                    request.get_json().get("max_pages", 0) or
+                    os.environ.get("RAG_MAX_PAGES", 40))
+
+    thread = threading.Thread(target=_run_ingest, args=(max_pages,), daemon=True)
+    thread.start()
+    logger.info("[RAG] Ingest thread started | max_pages=%d", max_pages)
+    return jsonify({"status": "started", "max_pages": max_pages}), 202
 
 
 # ---------------------------------------------------------------------------

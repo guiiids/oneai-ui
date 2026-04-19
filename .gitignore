@@ -15,3 +15,6 @@ __pycache__/
 
 # Claude session data
 .claude/
+
+# RAG vector store (generated at runtime)
+rag_data/

@@ -6,3 +6,6 @@ azure-identity>=1.16
 azure-keyvault-secrets>=4.8
 msal>=1.28
 
+# RAG dependencies
+chromadb>=0.5
+beautifulsoup4>=4.12
