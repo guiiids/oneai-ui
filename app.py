@@ -573,9 +573,24 @@ def chat_stream():
 
     base_messages = _build_sage_messages(history)
 
-    # RAG augmentation for the OneAI bot
+    # RAG augmentation for the OneAI bot + strict grounding system prompt
     if bot_type == "oneai-default" and RAG_AVAILABLE:
+        indexed_url = os.environ.get("RAG_START_URL", "the indexed website")
+        strict_system = {
+            "role": "system",
+            "content": (
+                f"You are OneAI, a knowledge assistant. "
+                f"You have been given access ONLY to content crawled and indexed from: {indexed_url}. "
+                "Your ONLY job is to answer questions using that indexed content. "
+                "If a question cannot be answered from the indexed content, reply: "
+                "'I can only answer questions about the indexed content. "
+                "That information is not available in the knowledge base.' "
+                "Do NOT answer from general knowledge. Do NOT speculate beyond what the documents say."
+            ),
+        }
         sage_messages = rag_pipeline.augment_messages(base_messages, user_message)
+        # Prepend strict system prompt as first message
+        sage_messages = [strict_system] + [m for m in sage_messages if m.get("role") != "system"]
         logger.info("[RAG] Augmented messages with KB context | conv=%s", conv_id)
     else:
         sage_messages = base_messages
@@ -758,7 +773,7 @@ def rag_status():
 
 @app.route("/api/rag/ingest", methods=["POST"])
 def rag_ingest():
-    """Start a background crawl-and-index job for agilent.com."""
+    """Start a background crawl-and-index job for a user-supplied URL."""
     if not RAG_AVAILABLE:
         return jsonify({"error": "RAG dependencies not installed."}), 503
 
@@ -766,16 +781,23 @@ def rag_ingest():
         if _ingest_state.get("status") == "running":
             return jsonify({"error": "Ingest already running."}), 409
 
-    req_data = request.get_json(force=True, silent=True)
-    if req_data and "max_pages" in req_data:
-        max_pages = int(req_data["max_pages"])
+    req_data = request.get_json(force=True, silent=True) or {}
+    max_pages = int(req_data.get("max_pages", os.environ.get("RAG_MAX_PAGES", 40)))
+    max_pages = min(max_pages, 50)  # hard cap at 50
+
+    # Allow user-supplied URL; fall back to env default
+    site_url = req_data.get("url", "").strip()
+    if site_url:
+        # Persist for the current process so the pipeline uses it
+        os.environ["RAG_START_URL"] = site_url
+        logger.info("[RAG] User-supplied URL: %s | max_pages=%d", site_url, max_pages)
     else:
-        max_pages = int(os.environ.get("RAG_MAX_PAGES", 40))
+        logger.info("[RAG] Using default RAG_START_URL | max_pages=%d", max_pages)
 
     thread = threading.Thread(target=_run_ingest, args=(max_pages,), daemon=True)
     thread.start()
     logger.info("[RAG] Ingest thread started | max_pages=%d", max_pages)
-    return jsonify({"status": "started", "max_pages": max_pages}), 202
+    return jsonify({"status": "started", "max_pages": max_pages, "url": site_url or os.environ.get("RAG_START_URL", "")}), 202
 
 
 # ---------------------------------------------------------------------------

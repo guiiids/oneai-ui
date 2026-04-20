@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "bugs": [
+    {
+      "id": "bug-001",
+      "timestamp": "2026-04-20T13:21:52.135Z",
+      "error_message": "Incorrect value in code",
+      "file": "templates/index.html",
+      "root_cause": "Had \"flex-1 overflow-y-auto px-4 py-6 sm:px-6 space-y-",
+      "fix": "Changed to \"flex-1 overflow-y-auto px-4 py-6 sm:px-6 space-y-",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "html"
+      ],
+      "related_bugs": [],
+      "occurrences": 5,
+      "last_seen": "2026-04-20T13:22:36.369Z"
+    },
+    {
+      "id": "bug-002",
+      "timestamp": "2026-04-20T13:27:39.441Z",
+      "error_message": "Incorrect value in code",
+      "file": "templates/index.html",
+      "root_cause": "Had \"flex h-8 w-8 items-center justify-center rounded-",
+      "fix": "Changed to \"flex h-9 w-9 items-center justify-center rounded-",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "html"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-04-20T13:27:50.949Z"
+    },
+    {
+      "id": "bug-003",
+      "timestamp": "2026-04-20T13:53:28.038Z",
+      "error_message": "Significant refactor of ",
+      "file": "templates/index.html",
+      "root_cause": "8 lines replaced/restructured",
+      "fix": "Rewrote 16→6 lines (8 removed) | Also: <!-- Bottom user avatar -->; <div class=\"mt-auto flex flex-col items-center gap | Also: <div class=\"mt-4 space-y-1\">; <!-- Gradient divider -->",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "html"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-04-20T13:56:11.289Z"
+    }
+  ]
+}
