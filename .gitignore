@@ -16,6 +16,14 @@ __pycache__/
 # Claude session data
 .claude/
 
+# Wolf AI agent data
+.wolf/
+
+# Design docs / PDFs
+*.pdf
+admin_docs/
+CLAUDE.md
+
 # RAG vector store (generated at runtime)
 rag_data/
 
