@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneAI — RAG Chatbot</title>
+    <meta
+      name="description"
+      content="Enterprise RAG-powered chatbot interface for intelligent document retrieval and conversational AI."
+    />
+    <!-- Anti-FOUC: apply theme before page renders -->
+    <script>
+      (function() {
+        var saved = localStorage.getItem('oneai-theme');
+        // Default to dark if no preference saved
+        if (!saved || saved === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "system-ui", "sans-serif"] },
+            colors: {
+              brand: {
+                50: "#eef2ff",
+                100: "#e0e7ff",
+                200: "#c7d2fe",
+                300: "#a5b4fc",
+                400: "#818cf8",
+                500: "#6366f1",
+                600: "#4f46e5",
+                700: "#4338ca",
+                800: "#3730a3",
+                900: "#312e81",
+                950: "#1e1b4b",
+              },
+            },
+            keyframes: {
+              "fade-up": {
+                "0%": { opacity: 0, transform: "translateY(8px)" },
+                "100%": { opacity: 1, transform: "translateY(0)" },
+              },
+              "pulse-dot": {
+                "0%, 80%, 100%": { opacity: 0.3, transform: "scale(0.8)" },
+                "40%": { opacity: 1, transform: "scale(1)" },
+              },
+            },
+            animation: {
+              "fade-up": "fade-up 0.3s ease-out",
+              "pulse-dot": "pulse-dot 1.4s infinite ease-in-out",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <style>
+      /* Base Theme Variables for Markdown Prose */
+      :root {
+        --code-bg: #f1f5f9;
+        --pre-bg: #f8fafc;
+        --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+        --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+      }
+      html.dark {
+        --code-bg: rgba(255, 255, 255, 0.06);
+        --pre-bg: rgba(0, 0, 0, 0.3);
+        --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+        --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+      /* Markdown-like prose inside messages */
+      .msg-prose p { margin-bottom: 0.5em; }
+      .msg-prose strong { font-weight: 600; }
+      .msg-prose code {
+        background: var(--code-bg);
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-size: 0.88em;
+      }
+      .msg-prose pre {
+        background: var(--pre-bg);
+        padding: 0.75em;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 0.5em 0;
+      }
+      .msg-prose ul { list-style: disc; padding-left: 1.25em; }
+      .msg-prose ol { list-style: decimal; padding-left: 1.25em; }
+
+      /* Typing indicator dots */
+      @keyframes pulse-dot {
+        0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+        40% { opacity: 1; transform: scale(1); }
+      }
+      .typing-dot { animation: pulse-dot 1.4s infinite ease-in-out; }
+      .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+      .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    </style>
+  </head>
+  
+  <body class="h-full font-sans antialiased bg-white text-gray-900 dark:bg-gray-950 dark:text-white transition-colors duration-200">
+    
+    <!-- ===================================================================== -->
+    <!-- MOBILE SIDEBAR OVERLAY                                                -->
+    <!-- ===================================================================== -->
+    <div id="mobile-sidebar-backdrop" class="fixed inset-0 z-50 bg-gray-900/80 backdrop-blur-sm hidden transition-opacity duration-300 lg:hidden" onclick="closeMobileSidebar()"></div>
+
+    <div id="mobile-sidebar" class="fixed inset-y-0 left-0 z-50 w-72 -translate-x-full transition-transform duration-300 ease-in-out lg:hidden">
+      <div class="flex h-full flex-col bg-gray-50 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10 transition-colors">
+        <!-- Close -->
+        <div class="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-white/5">
+          <div class="flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600">
+              <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
+              </svg>
+            </div>
+            <span class="text-sm font-semibold text-gray-900 dark:text-white">OneAI</span>
+          </div>
+          <button onclick="closeMobileSidebar()" class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <!-- Nav -->
+        <nav class="flex flex-1 flex-col px-4 pt-4 pb-4">
+          <ul class="space-y-1">
+            <li>
+              <a href="#" class="flex gap-x-3 rounded-lg bg-gray-200 px-3 py-2 text-sm font-medium text-gray-900 dark:bg-white/5 dark:text-white transition-colors">
+                <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.261 48.261 0 0 0 5.168-.530c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+                Chat
+              </a>
+            </li>
+            <li>
+              <a href="#" class="flex gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white transition-colors">
+                <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                Documents
+              </a>
+            </li>
+            <li>
+              <a href="#" class="flex gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white transition-colors">
+                <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.350.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+                Settings
+              </a>
+            </li>
+          </ul>
+          <!-- User avatar at bottom -->
+          <div class="mt-auto pt-4 border-t border-gray-200 dark:border-white/10">
+            <div class="flex items-center gap-3 px-3 py-2">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">{{ user_email[0]|upper if user_email else 'U' }}</div>
+              <div class="text-sm min-w-0 flex-1">
+                <p class="font-medium text-gray-900 dark:text-white truncate">{{ user_email or 'User' }}</p>
+                <a href="/auth/logout" class="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">Sign out</a>
+              </div>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- DESKTOP ICON SIDEBAR                                                  -->
+    <!-- ===================================================================== -->
+    <div class="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:flex lg:w-20 lg:flex-col lg:items-center lg:overflow-y-auto lg:bg-gray-50 lg:dark:bg-gray-900 lg:pb-4 lg:border-r lg:border-gray-200 lg:dark:border-white/5 transition-colors">
+      <!-- Brand logo -->
+      <div class="flex h-16 shrink-0 items-center justify-center">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-500/20">
+          <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" /></svg>
+        </div>
+      </div>
+      <!-- Nav icons -->
+      <nav class="mt-8">
+        <ul class="flex flex-col items-center space-y-2">
+          <li>
+            <a href="#" id="nav-chat" class="group relative flex items-center justify-center rounded-xl bg-gray-200 text-gray-900 dark:bg-white/5 dark:text-white p-3 transition-all hover:bg-gray-300 dark:hover:bg-white/10" title="Chat">
+              <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.261 48.261 0 0 0 5.168-.530c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#" id="nav-docs" class="group relative flex items-center justify-center rounded-xl p-3 text-gray-400 transition-all hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/5 dark:hover:text-white" title="Documents">
+              <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#" id="nav-kb" class="group relative flex items-center justify-center rounded-xl p-3 text-gray-400 transition-all hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/5 dark:hover:text-white" title="Knowledge Base">
+              <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#" id="nav-settings" class="group relative flex items-center justify-center rounded-xl p-3 text-gray-400 transition-all hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/5 dark:hover:text-white" title="Settings">
+              <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.350.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      <!-- Bottom user avatar -->
+      <div class="mt-auto flex flex-col items-center gap-2">
+        <a href="/auth/logout" class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white ring-2 ring-gray-200 dark:ring-white/10 transition-all hover:ring-red-500/50" title="{{ user_email or 'User' }} — Sign out">
+          {{ user_email[0]|upper if user_email else 'U' }}
+        </a>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MOBILE TOP BAR                                                        -->
+    <!-- ===================================================================== -->
+    <div class="sticky top-0 z-40 flex items-center gap-x-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-4 py-3 shadow-sm dark:shadow-none lg:hidden border-b border-gray-200 dark:border-white/5 transition-colors">
+      <button onclick="openMobileSidebar()" class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+      </button>
+      <div class="flex items-center gap-2 flex-1">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600">
+          <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" /></svg>
+        </div>
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">OneAI</span>
+      </div>
+      <button onclick="toggleBotPanel()" class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors lg:hidden" title="Assistants">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg>
+      </button>
+      <button onclick="toggleHistoryPanel()" class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors xl:hidden">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+      </button>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- BOT SELECTOR PANEL                                                    -->
+    <!-- ===================================================================== -->
+    <aside id="bot-selector-panel" class="fixed inset-y-0 left-20 z-40 hidden w-64 flex-col border-r border-gray-200 bg-gray-50/80 dark:border-white/5 dark:bg-gray-900/60 backdrop-blur-xl lg:flex transition-colors">
+      <div class="flex flex-col h-full px-4 py-5">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">Assistants</h2>
+          <button class="p-1 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" title="New bot">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          </button>
+        </div>
+
+        <!-- Search -->
+        <div class="relative mb-4">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+          <input type="text" id="bot-search" placeholder="Filter assistants…" class="w-full rounded-lg border border-gray-200 bg-white dark:border-white/5 dark:bg-white/[0.03] pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500/30 focus:outline-none transition-colors" oninput="filterBots(this.value)" />
+        </div>
+
+        <!-- Bot list -->
+        <div id="bot-list" class="flex-1 overflow-y-auto space-y-1 -mx-1 px-1">
+          <!-- Active bot -->
+          <button onclick="selectBot(this)" data-bot-id="oneai-default" class="bot-item group flex w-full items-center gap-3 rounded-xl bg-white ring-1 ring-gray-200 dark:bg-white/5 dark:ring-white/10 px-3 py-2.5 text-left transition-all">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500/30 to-brand-700/30 ring-1 ring-brand-500/20">
+              <svg class="h-4 w-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" /></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="bot-name truncate text-sm font-medium text-gray-900 dark:text-white">OneAI</p>
+              <p class="truncate text-[11px] text-gray-500 dark:text-gray-400">RAG · Knowledge Base</p>
+            </div>
+            <span id="kb-badge" class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 shrink-0 hidden">—</span>
+            <span class="bot-indicator h-1.5 w-1.5 rounded-full bg-brand-500 dark:bg-brand-400 shrink-0"></span>
+          </button>
+
+          <button onclick="selectBot(this)" data-bot-id="claude" class="bot-item group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-200 dark:hover:bg-white/[0.05]">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/10 ring-1 ring-amber-200 dark:ring-amber-500/20">
+              <svg class="h-4 w-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" /></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="bot-name truncate text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">SAGE</p>
+              <p class="truncate text-[11px] text-gray-500 dark:text-gray-400">Anthropic · Sonnet</p>
+            </div>
+          </button>
+
+          <!-- Additional Bots -->
+          <button onclick="selectBot(this)" data-bot-id="ob4" class="bot-item group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-200 dark:hover:bg-white/[0.05]">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/10 ring-1 ring-emerald-200 dark:ring-emerald-500/20">
+              <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21a48.25 48.25 0 0 1-8.135-.687c-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="bot-name truncate text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">OB-4</p>
+              <p class="truncate text-[11px] text-gray-500 dark:text-gray-400">Onboard · Completion</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- KB Controls (OneAI-only) -->
+        <div id="kb-controls" class="mt-3 space-y-2 px-1">
+          <button onclick="triggerIngest()" id="kb-ingest-btn"
+            class="flex w-full items-center justify-center gap-2 rounded-lg border border-brand-300 dark:border-brand-700/50 bg-brand-50 dark:bg-brand-900/20 px-3 py-2 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-800/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg id="kb-ingest-icon" class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            <span id="kb-ingest-label">Index Agilent KB</span>
+          </button>
+          <p id="kb-status-text" class="text-[10px] text-gray-500 dark:text-gray-400 text-center min-h-[1rem]"></p>
+        </div>
+
+        <!-- Footer -->
+        <div class="pt-4 border-t border-gray-200 dark:border-white/5 mt-4">
+          <button class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-white/[0.03] transition-all">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+            Add custom bot
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================================================================== -->
+    <!-- MAIN CONTENT                                                          -->
+    <!-- ===================================================================== -->
+    <main class="lg:pl-[336px] bg-white dark:bg-gray-950 transition-colors">
+      <div id="main-content-inner" class="transition-all duration-300 w-full">
+        <div class="flex flex-col h-[100dvh] lg:h-screen">
+          
+          <!-- Chat header -->
+          <header class="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 dark:border-white/5 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl px-6 py-4 transition-colors">
+            <div>
+              <h1 class="text-lg font-semibold text-gray-900 dark:text-white" id="chat-header-title">OneAI</h1>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Powered by RAG — retrieval-augmented generation</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <!-- Theme toggle -->
+              <button id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-all hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white">
+                <!-- Sun icon (shown in dark mode) -->
+                <svg id="icon-sun" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+                <!-- Moon icon (shown in light mode) -->
+                <svg id="icon-moon" class="h-4 w-4 hidden" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" /></svg>
+              </button>
+              <button onclick="startNewConversation()" id="btn-new-chat" class="flex items-center gap-2 rounded-lg bg-brand-50 dark:bg-brand-600/10 px-3 py-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 ring-1 ring-brand-500/20 transition-all hover:bg-brand-100 dark:hover:bg-brand-600/20 hover:ring-brand-500/40">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                New Chat
+              </button>
+              <button onclick="toggleHistoryPanel()" class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-all hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white" title="Toggle History">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.261 48.261 0 0 0 5.168-.530c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+              </button>
+            </div>
+          </header>
+
+          <!-- Messages container -->
+          <div id="chat-messages" class="flex-1 overflow-y-auto px-4 py-6 sm:px-6 space-y-1">
+            <!-- Welcome state -->
+            <div id="welcome-state" class="flex flex-col items-center justify-center h-full text-center px-4">
+              <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 dark:from-brand-500/20 dark:to-brand-700/20 ring-1 ring-brand-500/20 mb-6">
+                <svg class="h-8 w-8 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" /></svg>
+              </div>
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">How can I help you today?</h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400 max-w-md mb-8">Ask questions about your documents. I'll search through your knowledge base and provide answers with source references.</p>
+              
+              <!-- Starter prompts -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
+                <button onclick="sendStarterPrompt(this)" class="group rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] p-4 text-left text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/10 shadow-sm dark:shadow-none">
+                  <p class="font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Summarize recent documents</p>
+                  <p class="text-xs text-gray-500 mt-1">Get an overview of latest additions</p>
+                </button>
+                <!-- Other prompts styled similarly... -->
+                <button onclick="sendStarterPrompt(this)" class="group rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] p-4 text-left text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/10 shadow-sm dark:shadow-none">
+                  <p class="font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Find information about…</p>
+                  <p class="text-xs text-gray-500 mt-1">Search across your knowledge base</p>
+                </button>
+                <button onclick="sendStarterPrompt(this)" class="group rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] p-4 text-left text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/10 shadow-sm dark:shadow-none">
+                  <p class="font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Compare two topics</p>
+                  <p class="text-xs text-gray-500 mt-1">Analyze differences and similarities</p>
+                </button>
+                <button onclick="sendStarterPrompt(this)" class="group rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] p-4 text-left text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/10 shadow-sm dark:shadow-none">
+                  <p class="font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Explain a concept</p>
+                  <p class="text-xs text-gray-500 mt-1">Get detailed explanations with sources</p>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Input area -->
+          <div class="sticky bottom-0 border-t border-gray-200 dark:border-white/5 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl px-4 py-4 sm:px-6 transition-colors">
+            <form id="chat-form" class="relative" onsubmit="handleSubmit(event)">
+              <div class="flex items-end gap-3 rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] px-4 py-3 transition-all focus-within:border-brand-500/40 focus-within:ring-1 focus-within:ring-brand-500/20 shadow-sm dark:shadow-none">
+                <!-- Attach file -->
+                <button type="button" class="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" title="Attach file">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
+                </button>
+                <!-- Textarea -->
+                <textarea id="chat-input" rows="1" placeholder="Ask about your documents…" class="flex-1 resize-none border-0 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:ring-0 focus:outline-none max-h-36" oninput="autoResize(this)" onkeydown="handleKeyDown(event)"></textarea>
+                <!-- Send button -->
+                <button type="submit" id="btn-send" class="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white transition-all hover:bg-brand-500 disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
+                </button>
+              </div>
+              <p class="mt-2 text-center text-[11px] text-gray-500 dark:text-gray-600">OneAI may produce inaccurate information. Always verify critical answers.</p>
+            </form>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- HISTORY PANEL                                                         -->
+    <!-- ===================================================================== -->
+    <aside id="history-panel" class="fixed inset-y-0 right-0 hidden z-40 w-96 overflow-y-auto border-l border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-xl transition-colors">
+      <div class="px-6 py-6">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">History</h2>
+          <button onclick="refreshConversations()" class="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors" title="Refresh">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" /></svg>
+          </button>
+        </div>
+
+        <!-- Search -->
+        <div class="relative mb-4">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+          <input type="text" id="search-conversations" placeholder="Search conversations…" class="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500/40 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-colors" oninput="filterConversations(this.value)" />
+        </div>
+
+        <!-- Conversation list -->
+        <div id="conversation-list" class="space-y-1">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Empty state -->
+        <div id="history-empty" class="hidden py-12 text-center">
+          <svg class="mx-auto h-10 w-10 text-gray-400 dark:text-gray-600 mb-3" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>
+          <p class="text-sm text-gray-500">No conversations yet</p>
+          <p class="text-xs text-gray-400 dark:text-gray-600 mt-1">Start a chat to see your history here</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================================================================== -->
+    <!-- JAVASCRIPT                                                            -->
+    <!-- ===================================================================== -->
+    <script>
+      const BOT_CONFIG = {
+        'oneai-default': {
+          name: 'OneAI',
+          label: 'RAG · Knowledge Base',
+          colorClass: 'bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400',
+          icon: `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" /></svg>`
+        },
+        'claude': {
+          name: 'SAGE',
+          label: 'Anthropic · Sonnet',
+          colorClass: 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+          icon: `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" /></svg>`
+        },
+        'ob4': {
+          name: 'OB-4',
+          label: 'Onboard · Completion',
+          colorClass: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+          icon: `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21a48.25 48.25 0 0 1-8.135-.687c-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>`
+        }
+      };
+
+      let currentConversationId = "{{ conversation_id }}";
+      let isWaiting = false;
+
+      const chatMessages = document.getElementById("chat-messages");
+      const chatInput = document.getElementById("chat-input");
+      const btnSend = document.getElementById("btn-send");
+      const welcomeState = document.getElementById("welcome-state");
+      const convList = document.getElementById("conversation-list");
+      const historyEmpty = document.getElementById("history-empty");
+
+      function autoResize(el) {
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 144) + "px";
+        btnSend.disabled = !el.value.trim();
+      }
+
+      function handleKeyDown(e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          if (chatInput.value.trim()) document.getElementById("chat-form").requestSubmit();
+        }
+      }
+
+      // Render injected chat bubble elements with Light/Dark classes
+      function appendMessage(role, content) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "animate-fade-up";
+
+        if (role === "user") {
+          wrapper.innerHTML = `
+          <div class="flex justify-end mb-6">
+            <div class="max-w-[80%] rounded-2xl rounded-tr-md bg-brand-600 px-4 py-3 text-sm text-white shadow-sm dark:shadow-brand-600/10">
+              <p>${escapeHtml(content)}</p>
+            </div>
+          </div>`;
+        } else if (role === "assistant") {
+          const config = BOT_CONFIG[activeBotId] || BOT_CONFIG['oneai-default'];
+          wrapper.innerHTML = `
+          <div class="flex gap-3 mb-6">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${config.colorClass} ring-1 ring-black/5 dark:ring-white/10 mt-1">
+              ${config.icon}
+            </div>
+            <div class="flex-1 max-w-[85%]">
+              <div class="flex items-center gap-2 mb-1.5 px-1">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-900 dark:text-white">${config.name}</span>
+                <span class="text-[10px] font-medium text-brand-600/80 dark:text-brand-400/80">${config.label}</span>
+              </div>
+              <div class="rounded-2xl rounded-tl-sm bg-white border border-gray-100 text-gray-800 shadow-sm dark:bg-white/[0.04] dark:border-white/5 dark:text-gray-200 dark:shadow-lg px-4 py-3 text-sm msg-prose">
+                ${renderMarkdown(content)}
+              </div>
+            </div>
+          </div>`;
+        } else {
+          wrapper.innerHTML = `
+          <div class="flex justify-center mb-6">
+            <div class="rounded-lg bg-red-50 border border-red-200 text-red-600 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 px-4 py-2 text-sm shadow-sm">
+              ⚠ ${escapeHtml(content)}
+            </div>
+          </div>`;
+        }
+        chatMessages.appendChild(wrapper);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function appendStreamingMessage() {
+        const wrapper = document.createElement("div");
+        wrapper.className = "animate-fade-up";
+        const config = BOT_CONFIG[activeBotId] || BOT_CONFIG['oneai-default'];
+        wrapper.innerHTML = `
+        <div class="flex gap-3 mb-6">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${config.colorClass} ring-1 ring-black/5 dark:ring-white/10 mt-1">
+            ${config.icon}
+          </div>
+          <div class="flex-1 max-w-[85%]">
+            <div class="flex items-center gap-2 mb-1.5 px-1">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-gray-900 dark:text-white">${config.name}</span>
+              <span class="text-[10px] font-medium text-brand-600/80 dark:text-brand-400/80">${config.label}</span>
+            </div>
+            <div class="streaming-content rounded-2xl rounded-tl-sm bg-white border border-gray-100 text-gray-800 shadow-sm dark:bg-white/[0.04] dark:border-white/5 dark:text-gray-200 dark:shadow-lg px-4 py-3 text-sm msg-prose">
+              <span class="inline-block h-4 w-1 bg-brand-500 dark:bg-brand-400 animate-pulse"></span>
+            </div>
+          </div>
+        </div>`;
+        chatMessages.appendChild(wrapper);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return { wrapper, contentEl: wrapper.querySelector(".streaming-content") };
+      }
+
+      function showTypingIndicator() {
+        const el = document.createElement("div");
+        el.id = "typing-indicator";
+        el.className = "flex gap-3 mb-6 animate-fade-up";
+        const config = BOT_CONFIG[activeBotId] || BOT_CONFIG['oneai-default'];
+        el.innerHTML = `
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${config.colorClass} ring-1 ring-black/5 dark:ring-white/10 mt-1">
+          ${config.icon}
+        </div>
+        <div class="flex-1 max-w-[85%]">
+            <div class="flex items-center gap-2 mb-1.5 px-1">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-900 dark:text-white">${config.name}</span>
+                <span class="text-[10px] font-medium text-brand-600/80 dark:text-brand-400/80">${config.label}</span>
+            </div>
+            <div class="inline-block rounded-2xl rounded-tl-sm bg-white border border-gray-100 shadow-sm dark:bg-white/[0.04] dark:border-white/5 dark:shadow-lg px-4 py-3">
+              <div class="flex items-center gap-1.5">
+                <span class="typing-dot h-2 w-2 rounded-full bg-brand-400"></span>
+                <span class="typing-dot h-2 w-2 rounded-full bg-brand-400"></span>
+                <span class="typing-dot h-2 w-2 rounded-full bg-brand-400"></span>
+              </div>
+            </div>
+        </div>`;
+        chatMessages.appendChild(el);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return el;
+      }
+
+      // Rest of the API / Form Submission Logic (unchanged logically)
+      async function handleSubmit(e) {
+        e.preventDefault();
+        const msg = chatInput.value.trim();
+        if (!msg || isWaiting) return;
+
+        if (welcomeState) welcomeState.classList.add("hidden");
+
+        appendMessage("user", msg);
+        chatInput.value = "";
+        autoResize(chatInput);
+        btnSend.disabled = true;
+
+        const typingEl = showTypingIndicator();
+        isWaiting = true;
+
+        try {
+            if (activeBotId === "ob4") {
+                const res = await fetch("/api/ob4/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: msg, conversation_id: currentConversationId })
+                });
+                typingEl.remove();
+                if (!res.ok) {
+                    const errTxt = await res.text();
+                    throw new Error(errTxt || res.statusText);
+                }
+                const data = await res.json();
+                const { contentEl } = appendStreamingMessage();
+                contentEl.innerHTML = renderMarkdown(data.message || data.error);
+                if (data.conversation_id) { currentConversationId = data.conversation_id; refreshConversations(); }
+            } else {
+                const res = await fetch("/api/chat/stream", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: msg, conversation_id: currentConversationId, bot_type: activeBotId })
+                });
+                typingEl.remove();
+                if (!res.ok) {
+                    const errTxt = await res.text();
+                    throw new Error(errTxt || res.statusText);
+                }
+                
+                const newConvId = res.headers.get("X-Conversation-Id");
+                if (newConvId && newConvId !== currentConversationId) {
+                    currentConversationId = newConvId;
+                    refreshConversations();
+                }
+
+                const { contentEl } = appendStreamingMessage();
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let fullMsg = "";
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split(/\r?\n/);
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            const dataStr = line.slice(6).trim();
+                            if (dataStr === "[DONE]") break;
+                            try {
+                                const dataObj = JSON.parse(dataStr);
+                                const diff = dataObj.choices?.[0]?.delta?.content || "";
+                                fullMsg += diff;
+                                contentEl.innerHTML = renderMarkdown(fullMsg);
+                            } catch (e) {}
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            if (document.getElementById("typing-indicator")) {
+                document.getElementById("typing-indicator").remove();
+            }
+            const { contentEl } = appendStreamingMessage();
+            contentEl.innerHTML = `<span class="text-red-500">Error: ${escapeHtml(err.message)}</span>`;
+        } finally {
+            isWaiting = false;
+            btnSend.disabled = false;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+      }
+
+      function renderMarkdown(text) {
+        if (!text) return "";
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/`(.+?)`/g, "<code>$1</code>")
+          .replace(/\n/g, "<br>");
+      }
+      function escapeHtml(str) {
+        const div = document.createElement("div"); div.textContent = str; return div.innerHTML;
+      }
+
+      // Load Conversations dynamically updating the classes 
+      async function refreshConversations() {
+        try {
+          const res = await fetch("/api/conversations");
+          if (!res.ok) throw new Error("Failed to load history");
+          const data = await res.json();
+          
+          convList.innerHTML = "";
+          if (data.length === 0) { historyEmpty.classList.remove("hidden"); return; }
+          historyEmpty.classList.add("hidden");
+
+          data.forEach((c) => {
+            const isActive = c.id === currentConversationId;
+            const div = document.createElement("div");
+            div.className = `group flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-all ${isActive ? "bg-gray-100 ring-1 ring-gray-200 dark:bg-white/5 dark:ring-white/10" : "hover:bg-gray-50 dark:hover:bg-white/[0.03]"}`;
+            div.onclick = async () => {
+               const res = await fetch(`/api/conversations/${c.id}`);
+               if (res.ok) {
+                 const historyData = await res.json();
+                 currentConversationId = historyData.id;
+                 chatMessages.innerHTML = "";
+                 if (historyData.messages.length > 0 && welcomeState) {
+                   welcomeState.classList.add("hidden");
+                 }
+                 for (const msg of historyData.messages) {
+                   if (msg.role !== 'system') appendMessage(msg.role, msg.content);
+                 }
+                 refreshConversations();
+               }
+            };
+            div.innerHTML = `
+            <svg class="h-4 w-4 shrink-0 ${isActive ? "text-brand-600 dark:text-brand-400" : "text-gray-400 dark:text-gray-600"}" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.261 48.261 0 0 0 5.168-.530c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm ${isActive ? "text-gray-900 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400"}">${escapeHtml(c.title)}</p>
+              <p class="text-[11px] text-gray-500 dark:text-gray-600">${c.message_count} messages</p>
+            </div>`;
+            convList.appendChild(div);
+          });
+        } catch (e) {
+          console.error("refreshConversations error", e);
+        }
+      }
+
+      function sendStarterPrompt(btn) {
+        chatInput.value = btn.querySelector("p:first-child").textContent;
+        autoResize(chatInput); chatInput.focus();
+      }
+
+      let activeBotId = "oneai-default";
+      function selectBot(btn) {
+        activeBotId = btn.dataset.botId;
+        document.querySelectorAll(".bot-item").forEach((el) => {
+          const isActive = el.dataset.botId === activeBotId;
+          
+          if(isActive) {
+            el.classList.add("bg-white", "ring-1", "ring-gray-200", "dark:bg-white/5", "dark:ring-white/10");
+            el.classList.remove("hover:bg-gray-200", "dark:hover:bg-white/[0.05]");
+          } else {
+            el.classList.remove("bg-white", "ring-1", "ring-gray-200", "dark:bg-white/5", "dark:ring-white/10");
+            el.classList.add("hover:bg-gray-200", "dark:hover:bg-white/[0.05]");
+          }
+
+          const dot = el.querySelector(".bot-indicator");
+          if (dot) dot.remove();
+          
+          if (isActive) {
+            const indicator = document.createElement("span");
+            indicator.className = "bot-indicator h-1.5 w-1.5 rounded-full bg-brand-500 dark:bg-brand-400 shrink-0";
+            el.appendChild(indicator);
+          }
+          
+          const nameEl = el.querySelector(".bot-name");
+          if (nameEl) {
+            nameEl.classList.toggle("text-gray-900", isActive);
+            nameEl.classList.toggle("dark:text-white", isActive);
+            nameEl.classList.toggle("text-gray-600", !isActive);
+            nameEl.classList.toggle("dark:text-gray-400", !isActive);
+          }
+        });
+        const botName = btn.querySelector(".bot-name")?.textContent || "Assistant";
+        document.getElementById("chat-header-title").textContent = botName;
+
+        // Show KB controls only for OneAI RAG bot
+        const kbControls = document.getElementById("kb-controls");
+        if (kbControls) kbControls.classList.toggle("hidden", activeBotId !== "oneai-default");
+      }
+
+      // ── KB Status & Ingest ──────────────────────────────────────────────────
+
+      let _kbPollTimer = null;
+
+      async function checkKbStatus() {
+        try {
+          const res = await fetch("/api/rag/status");
+          if (!res.ok) return;
+          const data = await res.json();
+
+          const badge  = document.getElementById("kb-badge");
+          const btnEl  = document.getElementById("kb-ingest-btn");
+          const label  = document.getElementById("kb-ingest-label");
+          const icon   = document.getElementById("kb-ingest-icon");
+          const status = document.getElementById("kb-status-text");
+
+          if (!data.available) {
+            badge.textContent = "unavailable";
+            badge.classList.remove("hidden", "bg-green-100", "dark:bg-green-900/30", "text-green-700", "dark:text-green-300");
+            badge.classList.add("text-red-500");
+            status.textContent = "Install RAG dependencies (chromadb, beautifulsoup4)";
+            if (btnEl) btnEl.disabled = true;
+            return;
+          }
+
+          badge.classList.remove("hidden");
+
+          if (data.status === "running") {
+            badge.textContent = "Indexing…";
+            badge.className = "text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 shrink-0";
+            label.textContent = "Indexing…";
+            if (btnEl) btnEl.disabled = true;
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" class="animate-spin"/>`;
+            status.textContent = `Pages crawled: ${data.pages} — chunks: ${data.chunks}`;
+            if (!_kbPollTimer) _kbPollTimer = setInterval(checkKbStatus, 3000);
+
+          } else if (data.status === "done" || data.chunks > 0) {
+            badge.textContent = `${data.chunks} chunks`;
+            badge.className = "text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 shrink-0";
+            label.textContent = "Re-index Agilent KB";
+            if (btnEl) btnEl.disabled = false;
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />`;
+            status.textContent = `${data.pages} pages indexed — KB ready`;
+            clearInterval(_kbPollTimer); _kbPollTimer = null;
+
+          } else if (data.status === "error") {
+            badge.textContent = "error";
+            badge.className = "text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 shrink-0";
+            label.textContent = "Retry Index";
+            if (btnEl) btnEl.disabled = false;
+            status.textContent = `Error: ${data.error}`;
+            clearInterval(_kbPollTimer); _kbPollTimer = null;
+
+          } else {
+            // idle / not indexed
+            badge.textContent = "Not indexed";
+            badge.className = "text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 shrink-0";
+            label.textContent = "Index Agilent KB";
+            if (btnEl) btnEl.disabled = false;
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />`;
+            status.textContent = "No knowledge base yet — click to index";
+          }
+        } catch (e) {
+          console.error("KB status check failed", e);
+        }
+      }
+
+      async function triggerIngest() {
+        const btnEl = document.getElementById("kb-ingest-btn");
+        if (btnEl) btnEl.disabled = true;
+        try {
+          const res = await fetch("/api/rag/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+          if (!res.ok) {
+            const err = await res.json();
+            document.getElementById("kb-status-text").textContent = `Error: ${err.error}`;
+            if (btnEl) btnEl.disabled = false;
+            return;
+          }
+          await checkKbStatus();
+        } catch (e) {
+          console.error("Ingest trigger failed", e);
+          if (btnEl) btnEl.disabled = false;
+        }
+      }
+
+      function filterBots(q) {
+        q = q.toLowerCase();
+        document.querySelectorAll(".bot-item").forEach((el) => {
+          const name = el.querySelector(".bot-name")?.textContent.toLowerCase() || "";
+          el.style.display = name.includes(q) ? "" : "none";
+        });
+      }
+      function filterConversations(q) {
+        q = q.toLowerCase();
+        convList.querySelectorAll("div").forEach((el) => {
+          const title = el.querySelector("p").textContent.toLowerCase();
+          el.style.display = title.includes(q) ? "" : "none";
+        });
+      }
+
+      function openMobileSidebar() {
+        document.getElementById("mobile-sidebar").classList.remove("-translate-x-full");
+        document.getElementById("mobile-sidebar-backdrop").classList.remove("hidden");
+      }
+      function closeMobileSidebar() {
+        document.getElementById("mobile-sidebar").classList.add("-translate-x-full");
+        document.getElementById("mobile-sidebar-backdrop").classList.add("hidden");
+      }
+      function toggleBotPanel() {
+        const panel = document.getElementById("bot-selector-panel");
+        panel.classList.toggle("hidden"); panel.classList.toggle("flex");
+      }
+      function toggleHistoryPanel() {
+        const panel = document.getElementById("history-panel");
+        panel.classList.toggle("hidden"); panel.classList.toggle("block");
+        const mainInner = document.getElementById("main-content-inner");
+        if (mainInner) {
+          mainInner.classList.toggle("xl:pr-96");
+        }
+      }
+
+      // ---------- Theme ----------
+      function applyTheme(dark) {
+        const html = document.documentElement;
+        if (dark) { html.classList.add("dark"); } else { html.classList.remove("dark"); }
+        document.getElementById("icon-sun").classList.toggle("hidden", !dark);
+        document.getElementById("icon-moon").classList.toggle("hidden", dark);
+      }
+      function toggleTheme() {
+        const isDark = document.documentElement.classList.contains("dark");
+        localStorage.setItem("oneai-theme", !isDark ? "dark" : "light");
+        applyTheme(!isDark);
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const saved = localStorage.getItem("oneai-theme");
+        applyTheme(saved ? saved === "dark" : true);
+        chatInput.focus();
+        refreshConversations();
+        checkKbStatus();
+      });
+    </script>
+  </body>
+</html>

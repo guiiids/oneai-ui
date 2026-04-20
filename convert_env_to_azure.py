@@ -1,24 +1,26 @@
 import os
 import json
 
-def parse_env_file(env_file_path=".env"):
+from typing import List, Dict, Any
+
+def parse_env_file(env_file_path: str = ".env") -> List[Dict[str, Any]]:
     """Parse .env file and return list of dicts for Azure format."""
     # Keys to exclude from Azure conversion (Azure manages these dynamically)
     EXCLUDED_KEYS = {'PORT', 'WEBSITES_PORT'}
     
-    env_map = {}
-    excluded_vars = []
+    env_map: Dict[str, str] = {}
+    excluded_vars: List[str] = []
     with open(env_file_path, 'r') as f:
         for line in f:
-            line = line.strip()
+            line_str: str = line.strip()
             # Skip comments and empty lines
-            if not line or line.startswith('#'):
+            if not line_str or line_str.startswith('#'):
                 continue
             # Split on first '=' sign
-            if '=' in line:
-                key, value = line.split('=', 1)
-                key = key.strip()
-                value = value.strip()
+            if '=' in line_str:
+                parts = line_str.split('=', 1)
+                key: str = parts[0].strip()
+                value: str = parts[1].strip()
                 # Strip surrounding quotes (double or single) from values
                 if (value.startswith('"') and value.endswith('"')) or \
                    (value.startswith("'") and value.endswith("'")):
@@ -35,7 +37,7 @@ def parse_env_file(env_file_path=".env"):
     if excluded_vars:
         print(f"⚠️  Excluded from Azure conversion (Azure-managed): {', '.join(excluded_vars)}")
 
-    env_vars = [
+    env_vars: List[Dict[str, Any]] = [
         {
             "name": k,
             "value": v,

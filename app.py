@@ -16,7 +16,6 @@ import logging.handlers
 import functools
 import requests
 from datetime import datetime
-from typing import Optional, Tuple, List, Dict
 from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -29,9 +28,11 @@ except ImportError:
 
 load_dotenv()
 
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+
 def _setup_logging() -> logging.Logger:
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     fmt = "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
@@ -56,11 +57,14 @@ def _setup_logging() -> logging.Logger:
 
     return logging.getLogger(__name__)
 
+
 logger = _setup_logging()
+
 
 # ---------------------------------------------------------------------------
 # Azure Key Vault — resolve SAGE API key at startup
 # ---------------------------------------------------------------------------
+
 def _resolve_api_key() -> str:
     """
     Fetch SAGE_COMPLETIONS_API_KEY from Azure Key Vault (Managed Identity)
@@ -76,7 +80,6 @@ def _resolve_api_key() -> str:
         try:
             from azure.identity import DefaultAzureCredential
             from azure.keyvault.secrets import SecretClient
-            from azure.core.exceptions import AzureError
 
             credential = DefaultAzureCredential()
             client = SecretClient(vault_url=vault_url, credential=credential)
@@ -140,25 +143,37 @@ def login_required(f):
 # ---------------------------------------------------------------------------
 # SAGE Configuration
 # ---------------------------------------------------------------------------
+
 SAGE_BASE_URL = os.environ.get("SAGE_BASE_URL", "http://localhost:5001/v1")
-SAGE_API_KEY  = _resolve_api_key()
-SAGE_MODEL    = os.environ.get("SAGE_MODEL", "sage")
+SAGE_API_KEY = _resolve_api_key()
+SAGE_MODEL = os.environ.get("SAGE_MODEL", "sage")
 SAGE_VERIFY_SSL = os.environ.get("SAGE_VERIFY_SSL", "0") == "1"
+
+# Auth header format: "bearer" (default) or "api-key" (Azure OpenAI style)
+# Set SAGE_AUTH_HEADER_FORMAT=api-key in App Service if the SAGE endpoint
+# expects an `api-key:` header instead of `Authorization: Bearer`.
+SAGE_AUTH_HEADER_FORMAT = os.environ.get("SAGE_AUTH_HEADER_FORMAT", "bearer").lower().strip()
 
 # ---------------------------------------------------------------------------
 # Entra ID (Azure AD) — OAuth2 Client Credentials for production SAGE
 # ---------------------------------------------------------------------------
-AZURE_TENANT_ID     = os.environ.get("AZURE_TENANT_ID", "").strip()
-AZURE_CLIENT_ID     = os.environ.get("AZURE_CLIENT_ID", "").strip()
+AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID", "").strip()
+AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "").strip()
 AZURE_CLIENT_SECRET = os.environ.get("AZURE_CLIENT_SECRET", "").strip()
-SAGE_RESOURCE_ID    = os.environ.get("SAGE_RESOURCE_ID", "").strip()
+SAGE_RESOURCE_ID = os.environ.get("SAGE_RESOURCE_ID", "").strip()
 
 USE_ENTRA_AUTH = bool(AZURE_CLIENT_ID and AZURE_CLIENT_SECRET and AZURE_TENANT_ID)
 
 if USE_ENTRA_AUTH:
     logger.info("[Auth] Entra ID mode enabled — will acquire OAuth2 tokens for SAGE")
+elif SAGE_API_KEY:
+    logger.info(
+        "[Auth] API key mode — header format: %s | key ends: ...%s",
+        SAGE_AUTH_HEADER_FORMAT,
+        SAGE_API_KEY[-6:],
+    )
 else:
-    logger.info("[Auth] API key mode — using SAGE_COMPLETIONS_API_KEY (local dev)")
+    logger.warning("[Auth] No SAGE credentials found — requests will be unauthenticated!")
 
 _token_cache = {"access_token": "", "expires_at": 0}
 _token_lock = threading.Lock()
@@ -203,7 +218,8 @@ def _get_sage_oauth_token() -> str:
 # ---------------------------------------------------------------------------
 # OB-4 / Onboard API Configuration
 # ---------------------------------------------------------------------------
-OB4_URL   = os.environ.get("OB4_URL", "")
+
+OB4_URL = os.environ.get("OB4_URL", "")
 OB4_TOKEN = os.environ.get("OB4_TOKEN", "")
 OB4_EMAIL = os.environ.get("OB4_EMAIL", "")
 
@@ -264,7 +280,7 @@ def _sage_headers() -> dict:
     """Build request headers for SAGE API calls.
 
     Production: Entra ID OAuth2 token (when AZURE_CLIENT_ID is configured).
-    Local dev:  Static API key fallback.
+    Local dev:  Static API key via Bearer or api-key header (SAGE_AUTH_HEADER_FORMAT).
     """
     headers = {"Content-Type": "application/json"}
     if USE_ENTRA_AUTH:
@@ -274,10 +290,22 @@ def _sage_headers() -> dict:
         except RuntimeError as e:
             logger.error("[SAGE] Entra ID auth failed, falling back to API key: %s", e)
             if SAGE_API_KEY:
-                headers["api-key"] = SAGE_API_KEY
+                _apply_api_key_header(headers, SAGE_API_KEY)
     elif SAGE_API_KEY:
-        headers["api-key"] = SAGE_API_KEY
+        _apply_api_key_header(headers, SAGE_API_KEY)
     return headers
+
+
+def _apply_api_key_header(headers: dict, key: str) -> None:
+    """Apply the API key to headers using the configured format.
+
+    SAGE_AUTH_HEADER_FORMAT=bearer  → Authorization: Bearer <key>  (default)
+    SAGE_AUTH_HEADER_FORMAT=api-key → api-key: <key>  (Azure OpenAI style)
+    """
+    if SAGE_AUTH_HEADER_FORMAT == "api-key":
+        headers["api-key"] = key
+    else:
+        headers["Authorization"] = f"Bearer {key}"
 
 
 # ---------------------------------------------------------------------------
@@ -633,7 +661,7 @@ def ob4_chat():
     data = request.get_json(force=True)
     user_message = data.get("message", "").strip()
     conv_id = data.get("conversation_id") or session.get("conversation_id", "")
-    
+
     if not conv_id or conv_id not in conversations:
         conv_id, _ = get_or_create_conversation(conv_id)
 
@@ -641,14 +669,14 @@ def ob4_chat():
         return jsonify({"error": "Empty message"}), 400
 
     logger.info("[OB-4] Request | conv=%s | len=%d", conv_id, len(user_message))
-    
+
     # 1. Append user message to the shared conversation memory
     conversations[conv_id].append({
         "role": "user",
         "content": user_message,
         "timestamp": datetime.utcnow().isoformat()
     })
-    
+
     # 2. Extract conversation history for OB-4 (strip out OneAI's system prompt which is for SAGE)
     ob4_messages = [msg for msg in conversations[conv_id] if msg["role"] != "system"]
 
@@ -668,11 +696,11 @@ def ob4_chat():
             verify=OB4_VERIFY_SSL,
         )
         resp.raise_for_status()
-        
+
         # 3. Parse the OB-4 response so we can save it to history
         resp_data = resp.json()
         reply_content = ""
-        
+
         if "choices" in resp_data and len(resp_data["choices"]) > 0:
             choice = resp_data["choices"][0]
             if "messages" in choice:
@@ -681,16 +709,16 @@ def ob4_chat():
                     reply_content = assistant_msg.get("content", "")
             elif "message" in choice:
                 reply_content = choice["message"].get("content", "")
-                
+
         if not reply_content:
             reply_content = str(resp_data)
-            
+
         conversations[conv_id].append({
             "role": "assistant",
             "content": reply_content,
             "timestamp": datetime.utcnow().isoformat()
         })
-        
+
         logger.info("[OB-4] Response OK | conv=%s | status=%s", conv_id, resp.status_code)
         return jsonify({"message": reply_content, "conversation_id": conv_id}), 200
     except requests.exceptions.ConnectionError as e:
@@ -738,9 +766,11 @@ def rag_ingest():
         if _ingest_state.get("status") == "running":
             return jsonify({"error": "Ingest already running."}), 409
 
-    max_pages = int(request.get_json(force=True, silent=True) and
-                    request.get_json().get("max_pages", 0) or
-                    os.environ.get("RAG_MAX_PAGES", 40))
+    req_data = request.get_json(force=True, silent=True)
+    if req_data and "max_pages" in req_data:
+        max_pages = int(req_data["max_pages"])
+    else:
+        max_pages = int(os.environ.get("RAG_MAX_PAGES", 40))
 
     thread = threading.Thread(target=_run_ingest, args=(max_pages,), daemon=True)
     thread.start()
