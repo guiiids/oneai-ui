@@ -110,6 +110,17 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
 
 # ---------------------------------------------------------------------------
+# Auth configuration
+# ---------------------------------------------------------------------------
+# Set AUTH_REQUIRED=0 in .env to disable login requirement (open access)
+AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "0") == "1"
+
+if AUTH_REQUIRED:
+    logger.info("[Auth] Login required — users must sign in (AUTH_REQUIRED=1)")
+else:
+    logger.info("[Auth] Login DISABLED — open access mode (AUTH_REQUIRED=0)")
+
+# ---------------------------------------------------------------------------
 # User store (in-memory — swap for a database in production)
 # ---------------------------------------------------------------------------
 # Structure: { "email": { "password_hash": "...", "created_at": "..." } }
@@ -117,10 +128,11 @@ users: dict[str, dict] = {}
 
 
 def login_required(f):
-    """Decorator that redirects unauthenticated users to the login page."""
+    """Decorator that redirects unauthenticated users to the login page.
+    Becomes a no-op when AUTH_REQUIRED=0."""
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("user_email"):
+        if AUTH_REQUIRED and not session.get("user_email"):
             return redirect(url_for("login_page"))
         return f(*args, **kwargs)
     return decorated_function
@@ -262,9 +274,9 @@ def _sage_headers() -> dict:
         except RuntimeError as e:
             logger.error("[SAGE] Entra ID auth failed, falling back to API key: %s", e)
             if SAGE_API_KEY:
-                headers["Authorization"] = f"Bearer {SAGE_API_KEY}"
+                headers["api-key"] = SAGE_API_KEY
     elif SAGE_API_KEY:
-        headers["Authorization"] = f"Bearer {SAGE_API_KEY}"
+        headers["api-key"] = SAGE_API_KEY
     return headers
 
 

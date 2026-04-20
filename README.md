@@ -1,4 +1,4 @@
-# OneAI — RAG Chatbot
+# OneAI UI — RAG Chatbot
 
 Enterprise-grade chat UI built on Flask that unifies three AI backends under a single interface. The flagship **OneAI** mode is a Retrieval-Augmented Generation (RAG) pipeline grounded in [agilent.com](https://www.agilent.com) content.
 

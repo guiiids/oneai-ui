@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneAI — Sign In</title>
+    <meta name="description" content="Sign in to your OneAI Enterprise RAG Chatbot account." />
+    <!-- Anti-FOUC: apply theme before page renders -->
+    <script>
+      (function() {
+        var saved = localStorage.getItem('oneai-theme');
+        if (!saved || saved === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "system-ui", "sans-serif"] },
+            colors: {
+              brand: {
+                50: "#eef2ff", 100: "#e0e7ff", 200: "#c7d2fe", 300: "#a5b4fc",
+                400: "#818cf8", 500: "#6366f1", 600: "#4f46e5", 700: "#4338ca",
+                800: "#3730a3", 900: "#312e81", 950: "#1e1b4b",
+              },
+            },
+            keyframes: {
+              "fade-up": {
+                "0%": { opacity: 0, transform: "translateY(12px)" },
+                "100%": { opacity: 1, transform: "translateY(0)" },
+              },
+              "shimmer": {
+                "0%": { backgroundPosition: "-200% 0" },
+                "100%": { backgroundPosition: "200% 0" },
+              },
+              "float": {
+                "0%, 100%": { transform: "translateY(0px)" },
+                "50%": { transform: "translateY(-8px)" },
+              },
+            },
+            animation: {
+              "fade-up": "fade-up 0.5s ease-out",
+              "shimmer": "shimmer 3s linear infinite",
+              "float": "float 6s ease-in-out infinite",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <style>
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+      /* Animated gradient orbs */
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.15;
+        pointer-events: none;
+      }
+      html.dark .orb { opacity: 0.12; }
+
+      .orb-1 {
+        width: 400px; height: 400px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        top: -100px; left: -100px;
+        animation: float 8s ease-in-out infinite;
+      }
+      .orb-2 {
+        width: 350px; height: 350px;
+        background: linear-gradient(135deg, #06b6d4, #3b82f6);
+        bottom: -80px; right: -80px;
+        animation: float 10s ease-in-out infinite reverse;
+      }
+      .orb-3 {
+        width: 200px; height: 200px;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        top: 50%; left: 60%;
+        animation: float 12s ease-in-out infinite 2s;
+      }
+
+      /* Glass card */
+      .glass-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+      }
+      html.dark .glass-card {
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      /* Input focus ring animation */
+      .input-field {
+        transition: all 0.2s ease;
+      }
+      .input-field:focus {
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+      }
+      html.dark .input-field:focus {
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+      }
+
+      /* Submit button shimmer */
+      .btn-shimmer {
+        background-size: 200% 100%;
+        background-image: linear-gradient(
+          110deg,
+          #4f46e5 0%, #4f46e5 40%,
+          #6366f1 50%,
+          #4f46e5 60%, #4f46e5 100%
+        );
+      }
+      .btn-shimmer:hover {
+        animation: shimmer 2s linear infinite;
+      }
+
+      /* Alert toast */
+      .alert-toast {
+        animation: fade-up 0.3s ease-out;
+      }
+    </style>
+  </head>
+
+  <body class="h-full font-sans antialiased bg-gray-50 dark:bg-gray-950 transition-colors duration-300 overflow-hidden">
+    <!-- Background orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <div class="flex min-h-full items-center justify-center px-4 py-12 relative z-10">
+      <div class="w-full max-w-md animate-fade-up">
+
+        <!-- Logo + Title -->
+        <div class="text-center mb-8">
+          <div class="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-500/25 mb-4 animate-float">
+            <svg class="h-7 w-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
+            </svg>
+          </div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">OneAI</h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Enterprise RAG Chatbot</p>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert-toast mb-4 rounded-xl px-4 py-3 text-sm font-medium shadow-sm
+                {% if category == 'error' %}
+                  bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20
+                {% elif category == 'success' %}
+                  bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20
+                {% else %}
+                  bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-500/20
+                {% endif %}
+              ">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- Auth Card -->
+        <div class="glass-card rounded-2xl shadow-xl shadow-gray-900/5 dark:shadow-black/30 p-8">
+
+          <!-- Tab Toggle -->
+          <div class="flex rounded-xl bg-gray-100 dark:bg-white/[0.04] p-1 mb-8">
+            <button id="tab-login" onclick="switchTab('login')"
+              class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200
+                     bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm">
+              Sign In
+            </button>
+            <button id="tab-register" onclick="switchTab('register')"
+              class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200
+                     text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+              Create Account
+            </button>
+          </div>
+
+          <!-- LOGIN FORM -->
+          <form id="form-login" action="/auth/login" method="POST" class="space-y-5">
+            <div>
+              <label for="login-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+              <input id="login-email" name="email" type="email" required autocomplete="email" placeholder="you@company.com"
+                class="input-field w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label for="login-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
+              <div class="relative">
+                <input id="login-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••"
+                  class="input-field w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 pr-12 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:outline-none transition-colors" />
+                <button type="button" onclick="togglePasswordVisibility('login-password', this)" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+                  <svg class="eye-open h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                  <svg class="eye-closed h-4 w-4 hidden" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" id="btn-login"
+              class="btn-shimmer w-full rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-brand-600/20 transition-all hover:bg-brand-500 hover:shadow-lg hover:shadow-brand-500/30 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 active:scale-[0.98]">
+              Sign In
+            </button>
+          </form>
+
+          <!-- REGISTER FORM -->
+          <form id="form-register" action="/auth/register" method="POST" class="space-y-5 hidden">
+            <div>
+              <label for="reg-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+              <input id="reg-email" name="email" type="email" required autocomplete="email" placeholder="you@company.com"
+                class="input-field w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label for="reg-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
+              <div class="relative">
+                <input id="reg-password" name="password" type="password" required autocomplete="new-password" placeholder="At least 6 characters" minlength="6"
+                  class="input-field w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 pr-12 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:outline-none transition-colors" />
+                <button type="button" onclick="togglePasswordVisibility('reg-password', this)" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+                  <svg class="eye-open h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                  <svg class="eye-closed h-4 w-4 hidden" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label for="reg-confirm" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirm Password</label>
+              <div class="relative">
+                <input id="reg-confirm" name="confirm_password" type="password" required autocomplete="new-password" placeholder="••••••••" minlength="6"
+                  class="input-field w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 pr-12 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:outline-none transition-colors" />
+                <button type="button" onclick="togglePasswordVisibility('reg-confirm', this)" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+                  <svg class="eye-open h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                  <svg class="eye-closed h-4 w-4 hidden" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" id="btn-register"
+              class="btn-shimmer w-full rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-brand-600/20 transition-all hover:bg-brand-500 hover:shadow-lg hover:shadow-brand-500/30 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 active:scale-[0.98]">
+              Create Account
+            </button>
+          </form>
+        </div>
+
+        <!-- Footer -->
+        <p class="mt-6 text-center text-xs text-gray-400 dark:text-gray-600">
+          Secured by OneAI · 
+          <button onclick="toggleTheme()" class="underline hover:text-gray-600 dark:hover:text-gray-400 transition-colors">
+            Toggle Theme
+          </button>
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // ── Tab Switching ──────────────────────────────────────────
+      function switchTab(tab) {
+        const loginForm    = document.getElementById('form-login');
+        const registerForm = document.getElementById('form-register');
+        const tabLogin     = document.getElementById('tab-login');
+        const tabRegister  = document.getElementById('tab-register');
+
+        if (tab === 'login') {
+          loginForm.classList.remove('hidden');
+          registerForm.classList.add('hidden');
+          tabLogin.classList.add('bg-white', 'dark:bg-white/10', 'text-gray-900', 'dark:text-white', 'shadow-sm');
+          tabLogin.classList.remove('text-gray-500', 'dark:text-gray-400');
+          tabRegister.classList.remove('bg-white', 'dark:bg-white/10', 'text-gray-900', 'dark:text-white', 'shadow-sm');
+          tabRegister.classList.add('text-gray-500', 'dark:text-gray-400');
+        } else {
+          loginForm.classList.add('hidden');
+          registerForm.classList.remove('hidden');
+          tabRegister.classList.add('bg-white', 'dark:bg-white/10', 'text-gray-900', 'dark:text-white', 'shadow-sm');
+          tabRegister.classList.remove('text-gray-500', 'dark:text-gray-400');
+          tabLogin.classList.remove('bg-white', 'dark:bg-white/10', 'text-gray-900', 'dark:text-white', 'shadow-sm');
+          tabLogin.classList.add('text-gray-500', 'dark:text-gray-400');
+        }
+      }
+
+      // ── Password Visibility Toggle ─────────────────────────────
+      function togglePasswordVisibility(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const eyeOpen = btn.querySelector('.eye-open');
+        const eyeClosed = btn.querySelector('.eye-closed');
+
+        if (input.type === 'password') {
+          input.type = 'text';
+          eyeOpen.classList.add('hidden');
+          eyeClosed.classList.remove('hidden');
+        } else {
+          input.type = 'password';
+          eyeOpen.classList.remove('hidden');
+          eyeClosed.classList.add('hidden');
+        }
+      }
+
+      // ── Theme Toggle ───────────────────────────────────────────
+      function toggleTheme() {
+        const html = document.documentElement;
+        if (html.classList.contains('dark')) {
+          html.classList.remove('dark');
+          localStorage.setItem('oneai-theme', 'light');
+        } else {
+          html.classList.add('dark');
+          localStorage.setItem('oneai-theme', 'dark');
+        }
+      }
+
+      // ── Auto-switch to register tab if URL has ?tab=register ──
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'register') switchTab('register');
+    </script>
+  </body>
+</html>

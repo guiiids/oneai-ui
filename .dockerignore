@@ -1,0 +1,36 @@
+# Version control
+.git
+.gitignore
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment (secrets injected via Azure App Settings)
+.env
+
+# Logs (generated at runtime)
+*.log
+
+# macOS
+.DS_Store
+
+# IDE / Editor
+.claude/
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs / samples (not needed in container)
+*.md
+sample-ui.html
+ai_studio_code*.html
+
+# RAG vector store (generated at runtime)
+rag_data/

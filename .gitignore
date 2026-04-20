@@ -21,3 +21,4 @@ rag_data/
 
 # Pre-downloaded wheels (local artifact — rebuild with: pip download -r requirements.txt -d wheels/)
 wheels/
+.azure-temp-env-files/
